@@ -24,6 +24,7 @@ interface Product {
   wb_stock: number
   my_stock: number
   min_stock: number
+  photo_url: string | null
   updated_at: string
 }
 
@@ -36,7 +37,7 @@ interface Supply {
   total: number | null
   comment: string | null
   date: string
-  products?: { name: string }
+  products?: { name: string; photo_url: string | null }
 }
 
 function fmt(n: number | null) {
@@ -62,6 +63,22 @@ function StockBadge({ total, min }: { total: number; min: number }) {
   return <span className="badge badge-ok"><CheckCircle size={11}/>Норма</span>
 }
 
+function ProductPhoto({ url, name, size = 40 }: { url: string | null; name: string; size?: number }) {
+  const [err, setErr] = useState(false)
+  if (!url || err) {
+    return (
+      <div style={{ width: size, height: size, borderRadius: 6, background: '#f3f4f6', flexShrink: 0 }}
+        className="flex items-center justify-center">
+        <Package size={size * 0.45} className="text-gray-300"/>
+      </div>
+    )
+  }
+  return (
+    <img src={url} alt={name} onError={() => setErr(true)}
+      style={{ width: size, height: size, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }}/>
+  )
+}
+
 // ─── Filters ─────────────────────────────────────────────────────────────────
 
 function FiltersBar({ categories, category, onCategory, status, onStatus }: {
@@ -77,33 +94,25 @@ function FiltersBar({ categories, category, onCategory, status, onStatus }: {
     { value: 'low',  label: '⚠️ Мало' },
     { value: 'none', label: '🔴 Нет' },
   ]
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-1 text-sm text-gray-400">
         <Filter size={13}/> Фильтр:
       </div>
-      <select
-        className="input text-sm py-1.5"
-        style={{ width: 'auto' }}
-        value={category}
-        onChange={e => onCategory(e.target.value)}
-      >
+      <select className="input text-sm py-1.5" style={{ width: 'auto' }}
+        value={category} onChange={e => onCategory(e.target.value)}>
         <option value="">Все категории</option>
         {categories.map(c => <option key={c} value={c}>{c}</option>)}
       </select>
       <div className="flex gap-1 flex-wrap">
         {statuses.map(s => (
-          <button
-            key={s.value}
-            onClick={() => onStatus(s.value)}
+          <button key={s.value} onClick={() => onStatus(s.value)}
             className="btn text-xs py-1 px-2.5"
             style={{
               background: status === s.value ? 'var(--brand)' : '#f3f4f6',
               color: status === s.value ? '#fff' : 'var(--text)',
               border: status === s.value ? 'none' : '1px solid var(--border)',
-            }}
-          >
+            }}>
             {s.label}
           </button>
         ))}
@@ -118,7 +127,7 @@ function Dashboard({ products }: { products: Product[] }) {
   const [category, setCategory] = useState('')
   const [status, setStatus]     = useState<StockStatus>('all')
 
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))].sort()
+  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))).sort()
 
   const low  = products.filter(p => (p.wb_stock + p.my_stock) < p.min_stock)
   const none = products.filter(p => (p.wb_stock + p.my_stock) <= 0)
@@ -134,14 +143,13 @@ function Dashboard({ products }: { products: Product[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Stat cards */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Товаров',  value: products.length, icon: Package,       color: '#3b5bdb' },
-          { label: 'Мало',     value: low.length,      icon: AlertTriangle, color: '#ca8a04' },
-          { label: 'Нет',      value: none.length,     icon: XCircle,       color: '#dc2626' },
+          { label: 'Товаров', value: products.length, icon: Package,       color: '#3b5bdb' },
+          { label: 'Мало',    value: low.length,      icon: AlertTriangle, color: '#ca8a04' },
+          { label: 'Нет',     value: none.length,     icon: XCircle,       color: '#dc2626' },
         ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="card p-3 md:p-5 flex flex-col md:flex-row items-center md:items-start gap-2 md:gap-4">
+          <div key={label} className="card p-3 md:p-5 flex flex-col md:flex-row items-center gap-2 md:gap-4">
             <div style={{ background: color + '18', borderRadius: 8, padding: 8, flexShrink: 0 }}>
               <Icon size={18} style={{ color }}/>
             </div>
@@ -162,7 +170,7 @@ function Dashboard({ products }: { products: Product[] }) {
         </div>
       ) : (
         <>
-          {/* Desktop table */}
+          {/* Desktop */}
           <div className="card overflow-hidden hidden md:block">
             <div className="px-5 py-3 border-b border-gray-100 font-semibold text-sm text-gray-700">
               ⚠️ Требуют пополнения
@@ -170,7 +178,7 @@ function Dashboard({ products }: { products: Product[] }) {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                 <tr>
-                  {['Артикул','Название','Категория','WB','Мой','Всего','Мин.','Дефицит','Статус'].map(h => (
+                  {['Фото','Артикул','Название','Категория','WB','Мой','Всего','Мин.','Дефицит','Статус'].map(h => (
                     <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
                   ))}
                 </tr>
@@ -180,6 +188,7 @@ function Dashboard({ products }: { products: Product[] }) {
                   const total = p.wb_stock + p.my_stock
                   return (
                     <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} size={36}/></td>
                       <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
                       <td className="px-4 py-2.5 font-medium max-w-xs truncate">{p.name}</td>
                       <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
@@ -196,19 +205,23 @@ function Dashboard({ products }: { products: Product[] }) {
             </table>
           </div>
 
-          {/* Mobile cards */}
+          {/* Mobile */}
           <div className="space-y-2 md:hidden">
             <div className="text-sm font-semibold text-gray-600">⚠️ Требуют пополнения</div>
             {lowFiltered.map(p => {
               const total = p.wb_stock + p.my_stock
               return (
-                <div key={p.id} className="card p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-medium text-sm leading-snug">{p.name}</div>
+                <div key={p.id} className="card p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <ProductPhoto url={p.photo_url} name={p.name} size={52}/>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-medium text-sm leading-snug truncate">{p.name}</div>
+                        <StockBadge total={total} min={p.min_stock}/>
+                      </div>
                       <div className="text-xs text-gray-400 font-mono mt-0.5">{p.vendor_code}</div>
+                      {p.category && <div className="text-xs text-gray-400 mt-0.5">{p.category}</div>}
                     </div>
-                    <StockBadge total={total} min={p.min_stock}/>
                   </div>
                   <div className="grid grid-cols-4 gap-2 text-xs">
                     {[
@@ -223,7 +236,6 @@ function Dashboard({ products }: { products: Product[] }) {
                       </div>
                     ))}
                   </div>
-                  {p.category && <div className="text-xs text-gray-400">{p.category}</div>}
                 </div>
               )
             })}
@@ -244,7 +256,7 @@ function Products({ products, onMinStockChange }: {
   const [category, setCategory] = useState('')
   const [status, setStatus]     = useState<StockStatus>('all')
 
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))].sort()
+  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))).sort()
 
   const filtered = products.filter(p => {
     const total = p.wb_stock + p.my_stock
@@ -259,23 +271,18 @@ function Products({ products, onMinStockChange }: {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3 items-center">
-        <input
-          className="input text-sm"
-          style={{ width: 240 }}
-          placeholder="Поиск..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <input className="input text-sm" style={{ width: 240 }} placeholder="Поиск..."
+          value={search} onChange={e => setSearch(e.target.value)}/>
         <FiltersBar categories={categories} category={category} onCategory={setCategory} status={status} onStatus={setStatus}/>
       </div>
       <div className="text-xs text-gray-400">Найдено: {filtered.length} из {products.length}</div>
 
-      {/* Desktop table */}
+      {/* Desktop */}
       <div className="card overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-              {['Артикул','nmID','Название','Категория','Бренд','Цена','Скидка','С скидкой','Мин.','Статус'].map(h => (
+              {['Фото','Артикул','Название','Категория','Бренд','Цена','Скидка','С скидкой','Мин.','Статус'].map(h => (
                 <th key={h} className="px-4 py-2 text-left font-medium whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -288,8 +295,8 @@ function Products({ products, onMinStockChange }: {
               const total = p.wb_stock + p.my_stock
               return (
                 <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} size={36}/></td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.nm_id}</td>
                   <td className="px-4 py-2.5 font-medium max-w-xs truncate">{p.name}</td>
                   <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
                   <td className="px-4 py-2.5 text-gray-500">{p.brand}</td>
@@ -309,7 +316,7 @@ function Products({ products, onMinStockChange }: {
         </table>
       </div>
 
-      {/* Mobile cards */}
+      {/* Mobile */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 && (
           <div className="card p-6 text-center text-gray-400 text-sm">Нет данных</div>
@@ -317,17 +324,20 @@ function Products({ products, onMinStockChange }: {
         {filtered.map(p => {
           const total = p.wb_stock + p.my_stock
           return (
-            <div key={p.id} className="card p-4 space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="font-medium text-sm leading-snug">{p.name}</div>
+            <div key={p.id} className="card p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <ProductPhoto url={p.photo_url} name={p.name} size={56}/>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-medium text-sm leading-snug">{p.name}</div>
+                    <StockBadge total={total} min={p.min_stock}/>
+                  </div>
                   <div className="text-xs text-gray-400 font-mono mt-0.5">{p.vendor_code}</div>
+                  <div className="flex gap-2 mt-1 text-xs text-gray-400">
+                    {p.category && <span>{p.category}</span>}
+                    {p.brand && <span>· {p.brand}</span>}
+                  </div>
                 </div>
-                <StockBadge total={total} min={p.min_stock}/>
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-                {p.category && <span>{p.category}</span>}
-                {p.brand && <span>{p.brand}</span>}
               </div>
               <div className="grid grid-cols-3 gap-2 text-xs">
                 {[
@@ -355,7 +365,7 @@ function Stock({ products }: { products: Product[] }) {
   const [category, setCategory] = useState('')
   const [status, setStatus]     = useState<StockStatus>('all')
 
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))].sort()
+  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))).sort()
 
   const filtered = products.filter(p => {
     const total = p.wb_stock + p.my_stock
@@ -370,25 +380,26 @@ function Stock({ products }: { products: Product[] }) {
       <FiltersBar categories={categories} category={category} onCategory={setCategory} status={status} onStatus={setStatus}/>
       <div className="text-xs text-gray-400">Найдено: {filtered.length} из {products.length}</div>
 
-      {/* Desktop table */}
+      {/* Desktop */}
       <div className="card overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-              {['Артикул','Название','Категория','WB склад','Мой склад','Всего','Мин.','Статус','Обновлено'].map(h => (
+              {['Фото','Артикул','Название','Категория','WB','Мой','Всего','Мин.','Статус','Обновлено'].map(h => (
                 <th key={h} className="px-4 py-2 text-left font-medium whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Нет данных</td></tr>
+              <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Нет данных</td></tr>
             )}
             {filtered.map((p, i) => {
               const total = p.wb_stock + p.my_stock
               const date  = p.updated_at ? new Date(p.updated_at).toLocaleDateString('ru-RU') : '—'
               return (
                 <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} size={36}/></td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
                   <td className="px-4 py-2.5 font-medium max-w-xs truncate">{p.name}</td>
                   <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
@@ -405,7 +416,7 @@ function Stock({ products }: { products: Product[] }) {
         </table>
       </div>
 
-      {/* Mobile cards */}
+      {/* Mobile */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 && (
           <div className="card p-6 text-center text-gray-400 text-sm">Нет данных</div>
@@ -415,12 +426,16 @@ function Stock({ products }: { products: Product[] }) {
           const date  = p.updated_at ? new Date(p.updated_at).toLocaleDateString('ru-RU') : '—'
           return (
             <div key={p.id} className="card p-4 space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="font-medium text-sm leading-snug">{p.name}</div>
+              <div className="flex items-start gap-3">
+                <ProductPhoto url={p.photo_url} name={p.name} size={52}/>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-medium text-sm leading-snug">{p.name}</div>
+                    <StockBadge total={total} min={p.min_stock}/>
+                  </div>
                   <div className="text-xs text-gray-400 font-mono mt-0.5">{p.vendor_code}</div>
+                  {p.category && <div className="text-xs text-gray-400 mt-0.5">{p.category}</div>}
                 </div>
-                <StockBadge total={total} min={p.min_stock}/>
               </div>
               <div className="grid grid-cols-4 gap-2 text-xs">
                 {[
@@ -436,8 +451,7 @@ function Stock({ products }: { products: Product[] }) {
                 ))}
               </div>
               <div className="flex justify-between text-xs text-gray-400">
-                <span>{p.category}</span>
-                <span>{date}</span>
+                <span>{p.category}</span><span>{date}</span>
               </div>
             </div>
           )
@@ -460,7 +474,7 @@ function Supplies({ products }: { products: Product[] }) {
   })
 
   useEffect(() => {
-    supabase.from('supplies').select('*, products(name)').order('date', { ascending: false })
+    supabase.from('supplies').select('*, products(name, photo_url)').order('date', { ascending: false })
       .then(({ data }) => { setSupplies(data || []); setLoading(false) })
   }, [])
 
@@ -475,7 +489,7 @@ function Supplies({ products }: { products: Product[] }) {
     const data = await res.json()
     if (!res.ok) { alert('Ошибка: ' + data.error); setSaving(false); return }
     const product = products.find(p => p.vendor_code === form.vendor_code)
-    setSupplies(prev => [{ ...data, products: { name: product?.name || '' } }, ...prev])
+    setSupplies(prev => [{ ...data, products: { name: product?.name || '', photo_url: product?.photo_url || null } }, ...prev])
     setForm({ vendor_code: '', quantity: '', supplier: '', purchase_price: '', comment: '', date: new Date().toISOString().split('T')[0] })
     setShowForm(false)
     setSaving(false)
@@ -500,7 +514,8 @@ function Supplies({ products }: { products: Product[] }) {
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Количество *</label>
-              <input type="number" className="input" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} min={1}/>
+              <input type="number" className="input" value={form.quantity}
+                onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} min={1}/>
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Поставщик</label>
@@ -508,7 +523,8 @@ function Supplies({ products }: { products: Product[] }) {
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Цена закупки, ₽</label>
-              <input type="number" className="input" value={form.purchase_price} onChange={e => setForm(f => ({ ...f, purchase_price: e.target.value }))}/>
+              <input type="number" className="input" value={form.purchase_price}
+                onChange={e => setForm(f => ({ ...f, purchase_price: e.target.value }))}/>
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Дата</label>
@@ -528,25 +544,26 @@ function Supplies({ products }: { products: Product[] }) {
         </div>
       )}
 
-      {/* Desktop table */}
+      {/* Desktop */}
       <div className="card overflow-x-auto hidden md:block">
         {loading ? (
-          <div className="p-8 text-center text-gray-400"><Loader2 className="animate-spin mx-auto"/></div>
+          <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-gray-400"/></div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
               <tr>
-                {['Дата','Артикул','Название','Кол-во','Поставщик','Цена','Сумма','Комментарий'].map(h => (
+                {['Фото','Дата','Артикул','Название','Кол-во','Поставщик','Цена','Сумма','Комментарий'].map(h => (
                   <th key={h} className="px-4 py-2 text-left font-medium whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {supplies.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Поставок пока нет</td></tr>
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Поставок пока нет</td></tr>
               )}
               {supplies.map((s, i) => (
                 <tr key={s.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="px-4 py-2"><ProductPhoto url={s.products?.photo_url || null} name={s.products?.name || ''} size={36}/></td>
                   <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">{new Date(s.date).toLocaleDateString('ru-RU')}</td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{s.vendor_code}</td>
                   <td className="px-4 py-2.5 max-w-xs truncate">{s.products?.name || '—'}</td>
@@ -562,20 +579,23 @@ function Supplies({ products }: { products: Product[] }) {
         )}
       </div>
 
-      {/* Mobile cards */}
+      {/* Mobile */}
       <div className="space-y-2 md:hidden">
         {loading && <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-gray-400"/></div>}
         {!loading && supplies.length === 0 && (
           <div className="card p-6 text-center text-gray-400 text-sm">Поставок пока нет</div>
         )}
         {supplies.map(s => (
-          <div key={s.id} className="card p-4 space-y-2">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="font-medium text-sm">{s.products?.name || s.vendor_code}</div>
-                <div className="text-xs text-gray-400 font-mono">{s.vendor_code}</div>
+          <div key={s.id} className="card p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <ProductPhoto url={s.products?.photo_url || null} name={s.products?.name || ''} size={48}/>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="font-medium text-sm leading-snug">{s.products?.name || s.vendor_code}</div>
+                  <div className="text-xs text-gray-400 whitespace-nowrap">{new Date(s.date).toLocaleDateString('ru-RU')}</div>
+                </div>
+                <div className="text-xs text-gray-400 font-mono mt-0.5">{s.vendor_code}</div>
               </div>
-              <div className="text-xs text-gray-400 whitespace-nowrap">{new Date(s.date).toLocaleDateString('ru-RU')}</div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-xs">
               {[
@@ -710,17 +730,15 @@ export default function App() {
   }
 
   const tabs: { id: Tab; label: string; icon: any }[] = [
-    { id: 'dashboard', label: 'Дашборд',  icon: BarChart2   },
-    { id: 'products',  label: 'Товары',    icon: Package     },
-    { id: 'stock',     label: 'Остатки',   icon: TrendingDown},
-    { id: 'supplies',  label: 'Поставки',  icon: Truck       },
-    { id: 'settings',  label: 'Настройки', icon: Settings    },
+    { id: 'dashboard', label: 'Дашборд',  icon: BarChart2    },
+    { id: 'products',  label: 'Товары',    icon: Package      },
+    { id: 'stock',     label: 'Остатки',   icon: TrendingDown },
+    { id: 'supplies',  label: 'Поставки',  icon: Truck        },
+    { id: 'settings',  label: 'Настройки', icon: Settings     },
   ]
 
   return (
     <div className="min-h-screen pb-20 md:pb-0" style={{ background: 'var(--bg)' }}>
-
-      {/* Header */}
       <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 md:gap-3">
@@ -734,15 +752,14 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             {importMsg && <span className="text-xs md:text-sm">{importMsg}</span>}
-            <button className="btn btn-primary text-xs md:text-sm px-3 md:px-4 py-1.5 md:py-2" onClick={handleImport} disabled={importing}>
+            <button className="btn btn-primary text-xs md:text-sm px-3 md:px-4 py-1.5 md:py-2"
+              onClick={handleImport} disabled={importing}>
               {importing
                 ? <><Loader2 size={13} className="animate-spin"/>Импорт...</>
                 : <><RefreshCw size={13}/><span className="hidden md:inline">Импорт из WB</span><span className="md:hidden">WB</span></>}
             </button>
           </div>
         </div>
-
-        {/* Desktop tabs */}
         <div className="max-w-7xl mx-auto px-4 md:px-6 hidden md:flex gap-1">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)}
@@ -757,7 +774,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Content */}
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
         {tab === 'dashboard' && <Dashboard products={products}/>}
         {tab === 'products'  && <Products  products={products} onMinStockChange={handleMinStockChange}/>}
@@ -766,7 +782,6 @@ export default function App() {
         {tab === 'settings'  && <SettingsPanel/>}
       </main>
 
-      {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50"
         style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
         <div className="flex">
