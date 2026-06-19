@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Package, TrendingDown, Truck, Settings, RefreshCw,
   Key, Trash2, Plus, AlertTriangle, CheckCircle, XCircle,
-  Loader2, BarChart2, Filter
+  Loader2, BarChart2, Filter, ExternalLink
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -48,6 +48,21 @@ function fmt(n: number | null) {
 function fmtPrice(n: number | null) {
   if (n == null) return '—'
   return n.toLocaleString('ru-RU') + ' ₽'
+}
+
+
+function wbUrl(nmId: number) {
+  return `https://www.wildberries.ru/catalog/${nmId}/detail.aspx`
+}
+
+function WbLink({ nmId, children }: { nmId: number; children: React.ReactNode }) {
+  return (
+    <a href={wbUrl(nmId)} target="_blank" rel="noopener noreferrer"
+      className="flex items-center gap-1 hover:text-blue-600 transition-colors group">
+      {children}
+      <ExternalLink size={11} className="text-gray-300 group-hover:text-blue-400 flex-shrink-0"/>
+    </a>
+  )
 }
 
 function getStatus(total: number, min: number): StockStatus {
@@ -297,7 +312,7 @@ function Products({ products, onMinStockChange }: {
                 <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                   <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} size={36}/></td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
-                  <td className="px-4 py-2.5 font-medium max-w-xs truncate">{p.name}</td>
+                  <td className="px-4 py-2.5 font-medium max-w-xs truncate"><WbLink nmId={p.nm_id}>{p.name}</WbLink></td>
                   <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
                   <td className="px-4 py-2.5 text-gray-500">{p.brand}</td>
                   <td className="px-4 py-2.5">{fmtPrice(p.price)}</td>
@@ -401,7 +416,7 @@ function Stock({ products }: { products: Product[] }) {
                 <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                   <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} size={36}/></td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
-                  <td className="px-4 py-2.5 font-medium max-w-xs truncate">{p.name}</td>
+                  <td className="px-4 py-2.5 font-medium max-w-xs truncate"><WbLink nmId={p.nm_id}>{p.name}</WbLink></td>
                   <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
                   <td className="px-4 py-2.5">{fmt(p.wb_stock)}</td>
                   <td className="px-4 py-2.5">{fmt(p.my_stock)}</td>
