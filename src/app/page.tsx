@@ -790,6 +790,10 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             {importMsg && <span className="text-xs md:text-sm">{importMsg}</span>}
+            <span className="text-xs text-gray-400 hidden md:block">{user?.email}</span>
+            <button className="btn btn-secondary text-xs py-1.5 px-2.5" onClick={handleLogout} title="Выйти">
+              <LogOut size={14}/>
+            </button>
             <button className="btn btn-primary text-xs md:text-sm px-3 md:px-4 py-1.5 md:py-2"
               onClick={handleImport} disabled={importing}>
               {importing
