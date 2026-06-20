@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Package, TrendingDown, Truck, Settings, RefreshCw,
   Key, Trash2, Plus, AlertTriangle, CheckCircle, XCircle,
-  Loader2, BarChart2, Filter, ExternalLink
+  Loader2, BarChart2, Filter, ExternalLink, LogOut
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 type Tab = 'dashboard' | 'products' | 'stock' | 'supplies' | 'settings'
@@ -700,17 +701,43 @@ function SettingsPanel() {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const router = useRouter()
   const [tab, setTab]             = useState<Tab>('dashboard')
   const [products, setProducts]   = useState<Product[]>([])
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
+  const [user, setUser]           = useState<any>(null)
+  const [authLoading, setAuthLoading] = useState(true)
 
   const loadProducts = useCallback(async () => {
     const { data } = await supabase.from('products').select('*').order('name')
     setProducts(data || [])
   }, [])
 
-  useEffect(() => { loadProducts() }, [loadProducts])
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.push('/login')
+      } else {
+        setUser(session.user)
+        setAuthLoading(false)
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) router.push('/login')
+      else { setUser(session.user); setAuthLoading(false) }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [router])
+
+  useEffect(() => { if (!authLoading) loadProducts() }, [loadProducts, authLoading])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   const handleImport = async () => {
     setImporting(true)
@@ -739,6 +766,14 @@ export default function App() {
     { id: 'supplies',  label: 'Поставки',  icon: Truck        },
     { id: 'settings',  label: 'Настройки', icon: Settings     },
   ]
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
+        <Loader2 size={32} className="animate-spin text-gray-400"/>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen pb-20 md:pb-0" style={{ background: 'var(--bg)' }}>
