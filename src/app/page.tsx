@@ -78,19 +78,14 @@ function StockBadge({ total, min }: { total: number; min: number }) {
   return <span className="badge badge-ok"><CheckCircle size={11}/>Норма</span>
 }
 
-function ProductPhoto({ url, name, size = 40 }: { url: string | null; name: string; size?: number }) {
-  const [err, setErr] = useState(false)
-  if (!url || err) {
-    return (
-      <div style={{ width: size, height: size, borderRadius: 6, background: '#f3f4f6', flexShrink: 0 }}
-        className="flex items-center justify-center">
-        <Package size={size * 0.45} className="text-gray-300"/>
-      </div>
-    )
-  }
+function ProductPhoto({ url, name, size = 40, nmId }: { url: string | null; name: string; size?: number; nmId?: number }) {
   return (
-    <img src={url} alt={name} onError={() => setErr(true)}
-      style={{ width: size, height: size, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }}/>
+    <a href={nmId ? wbUrl(nmId) : '#'} target="_blank" rel="noopener noreferrer"
+      title="Открыть на WB"
+      style={{ width: size, height: size, borderRadius: 6, background: '#e0e9ff', flexShrink: 0, textDecoration: 'none' }}
+      className="flex items-center justify-center hover:bg-blue-200 transition-colors">
+      <ExternalLink size={size * 0.4} style={{ color: 'var(--brand)' }}/>
+    </a>
   )
 }
 
@@ -203,7 +198,6 @@ function Dashboard({ products }: { products: Product[] }) {
                   const total = p.wb_stock + p.my_stock
                   return (
                     <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} size={36}/></td>
                       <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
                       <td className="px-4 py-2.5 font-medium max-w-xs truncate">{p.name}</td>
                       <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
@@ -228,7 +222,6 @@ function Dashboard({ products }: { products: Product[] }) {
               return (
                 <div key={p.id} className="card p-4 space-y-3">
                   <div className="flex items-start gap-3">
-                    <ProductPhoto url={p.photo_url} name={p.name} size={52}/>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="font-medium text-sm leading-snug truncate">{p.name}</div>
@@ -310,7 +303,6 @@ function Products({ products, onMinStockChange }: {
               const total = p.wb_stock + p.my_stock
               return (
                 <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} size={36}/></td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
                   <td className="px-4 py-2.5 font-medium max-w-xs truncate"><WbLink nmId={p.nm_id}>{p.name}</WbLink></td>
                   <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
@@ -341,7 +333,6 @@ function Products({ products, onMinStockChange }: {
           return (
             <div key={p.id} className="card p-4 space-y-3">
               <div className="flex items-start gap-3">
-                <ProductPhoto url={p.photo_url} name={p.name} size={56}/>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-medium text-sm leading-snug">{p.name}</div>
@@ -414,7 +405,7 @@ function Stock({ products }: { products: Product[] }) {
               const date  = p.updated_at ? new Date(p.updated_at).toLocaleDateString('ru-RU') : '—'
               return (
                 <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} size={36}/></td>
+                  <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} nmId={p.nm_id} size={36}/></td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
                   <td className="px-4 py-2.5 font-medium max-w-xs truncate"><WbLink nmId={p.nm_id}>{p.name}</WbLink></td>
                   <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
@@ -442,7 +433,6 @@ function Stock({ products }: { products: Product[] }) {
           return (
             <div key={p.id} className="card p-4 space-y-3">
               <div className="flex items-start gap-3">
-                <ProductPhoto url={p.photo_url} name={p.name} size={52}/>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-medium text-sm leading-snug">{p.name}</div>
@@ -578,7 +568,6 @@ function Supplies({ products }: { products: Product[] }) {
               )}
               {supplies.map((s, i) => (
                 <tr key={s.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="px-4 py-2"><ProductPhoto url={s.products?.photo_url || null} name={s.products?.name || ''} size={36}/></td>
                   <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">{new Date(s.date).toLocaleDateString('ru-RU')}</td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{s.vendor_code}</td>
                   <td className="px-4 py-2.5 max-w-xs truncate">{s.products?.name || '—'}</td>
@@ -603,7 +592,6 @@ function Supplies({ products }: { products: Product[] }) {
         {supplies.map(s => (
           <div key={s.id} className="card p-4 space-y-3">
             <div className="flex items-start gap-3">
-              <ProductPhoto url={s.products?.photo_url || null} name={s.products?.name || ''} size={48}/>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start gap-2">
                   <div className="font-medium text-sm leading-snug">{s.products?.name || s.vendor_code}</div>
