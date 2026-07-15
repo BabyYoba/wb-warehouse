@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Package, TrendingDown, Truck, Settings, RefreshCw,
   Key, Trash2, Plus, AlertTriangle, CheckCircle, XCircle,
-  Loader2, BarChart2, Filter, ExternalLink, LogOut
+  Loader2, BarChart2, Filter, ExternalLink, LogOut,
+  Download, Printer
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -51,7 +52,6 @@ function fmtPrice(n: number | null) {
   return n.toLocaleString('ru-RU') + ' ₽'
 }
 
-
 function wbUrl(nmId: number) {
   return `https://www.wildberries.ru/catalog/${nmId}/detail.aspx`
 }
@@ -72,6 +72,12 @@ function getStatus(total: number, min: number): StockStatus {
   return 'ok'
 }
 
+function getStatusLabel(s: StockStatus) {
+  if (s === 'none') return 'Нет'
+  if (s === 'low') return 'Мало'
+  return 'Норма'
+}
+
 function StockBadge({ total, min }: { total: number; min: number }) {
   const s = getStatus(total, min)
   if (s === 'none') return <span className="badge badge-none"><XCircle size={11}/>Нет</span>
@@ -87,6 +93,143 @@ function ProductPhoto({ url, name, size = 40, nmId }: { url: string | null; name
       className="flex items-center justify-center hover:bg-blue-200 transition-colors">
       <ExternalLink size={size * 0.4} style={{ color: 'var(--brand)' }}/>
     </a>
+  )
+}
+
+// ─── Export functions ─────────────────────────────────────────────────────────
+
+async function exportToExcel(products: Product[]) {
+  const XLSX = await import('xlsx')
+  const rows = products.map(p => ({
+    'Артикул': p.vendor_code,
+    'nmID': p.nm_id,
+    'Название': p.name,
+    'Категория': p.category,
+    'Бренд': p.brand,
+    'Склад WB': p.wb_stock,
+    'Мой склад': p.my_stock,
+    'Всего': p.wb_stock + p.my_stock,
+    'Мин. остаток': p.min_stock,
+    'Дефицит': Math.max(0, p.min_stock - (p.wb_stock + p.my_stock)),
+    'Статус': getStatusLabel(getStatus(p.wb_stock + p.my_stock, p.min_stock)),
+    'Цена': p.price ?? '',
+    'Скидка %': p.discount ?? '',
+    'Цена со скидкой': p.discounted_price ?? '',
+    'Обновлено': p.updated_at ? new Date(p.updated_at).toLocaleDateString('ru-RU') : '',
+  }))
+
+  const ws = XLSX.utils.json_to_sheet(rows)
+  const wb = XLSX.utils.book_new()
+
+  // Ширина колонок
+  ws['!cols'] = [
+    { wch: 16 }, { wch: 12 }, { wch: 40 }, { wch: 16 }, { wch: 16 },
+    { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 10 },
+    { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
+  ]
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Остатки')
+  const date = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')
+  XLSX.writeFile(wb, `остатки_${date}.xlsx`)
+}
+
+function printStocks(products: Product[]) {
+  const date = new Date().toLocaleDateString('ru-RU')
+  const rows = products.map((p, i) => {
+    const total = p.wb_stock + p.my_stock
+    const status = getStatus(total, p.min_stock)
+    const statusColor = status === 'none' ? '#dc2626' : status === 'low' ? '#ca8a04' : '#16a34a'
+    const statusLabel = getStatusLabel(status)
+    const bg = i % 2 === 0 ? '#ffffff' : '#f9fafb'
+    return `
+      <tr style="background:${bg}">
+        <td>${p.vendor_code}</td>
+        <td>${p.name}</td>
+        <td>${p.category}</td>
+        <td style="text-align:center">${p.wb_stock}</td>
+        <td style="text-align:center">${p.my_stock}</td>
+        <td style="text-align:center;font-weight:bold">${total}</td>
+        <td style="text-align:center;color:#6b7280">${p.min_stock}</td>
+        <td style="text-align:center;color:#dc2626;font-weight:bold">${Math.max(0, p.min_stock - total) || '—'}</td>
+        <td style="text-align:center;color:${statusColor};font-weight:bold">${statusLabel}</td>
+      </tr>`
+  }).join('')
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8"/>
+      <title>Остатки — ${date}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 20px; }
+        h1 { font-size: 16px; margin-bottom: 4px; }
+        .meta { color: #6b7280; font-size: 11px; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #1e40af; color: white; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; }
+        td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+        @media print {
+          body { padding: 10px; }
+          @page { margin: 1cm; size: A4 landscape; }
+        }
+      </style>
+    </head>
+    <body>
+      <h1>📦 Остатки на складе</h1>
+      <div class="meta">Сформировано: ${date} · Товаров: ${products.length}</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Артикул</th><th>Название</th><th>Категория</th>
+            <th>WB</th><th>Мой</th><th>Всего</th>
+            <th>Мин.</th><th>Дефицит</th><th>Статус</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </body>
+    </html>`
+
+  const win = window.open('', '_blank')
+  if (!win) return
+  win.document.write(html)
+  win.document.close()
+  win.onload = () => { win.print() }
+}
+
+// ─── Export Panel ─────────────────────────────────────────────────────────────
+
+function ExportPanel({ products }: { products: Product[] }) {
+  const [exporting, setExporting] = useState(false)
+
+  const handleExcel = async () => {
+    setExporting(true)
+    await exportToExcel(products)
+    setExporting(false)
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        className="btn btn-secondary text-xs py-1.5 px-3 gap-1.5"
+        onClick={handleExcel}
+        disabled={exporting || !products.length}
+        title="Скачать Excel"
+      >
+        {exporting ? <Loader2 size={13} className="animate-spin"/> : <Download size={13}/>}
+        <span className="hidden md:inline">Excel</span>
+      </button>
+      <button
+        className="btn btn-secondary text-xs py-1.5 px-3 gap-1.5"
+        onClick={() => printStocks(products)}
+        disabled={!products.length}
+        title="Печать / PDF"
+      >
+        <Printer size={13}/>
+        <span className="hidden md:inline">Печать</span>
+      </button>
+    </div>
   )
 }
 
@@ -139,7 +282,6 @@ function Dashboard({ products }: { products: Product[] }) {
   const [status, setStatus]     = useState<StockStatus>('all')
 
   const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))).sort()
-
   const low  = products.filter(p => (p.wb_stock + p.my_stock) < p.min_stock)
   const none = products.filter(p => (p.wb_stock + p.my_stock) <= 0)
 
@@ -181,15 +323,15 @@ function Dashboard({ products }: { products: Product[] }) {
         </div>
       ) : (
         <>
-          {/* Desktop */}
           <div className="card overflow-hidden hidden md:block">
-            <div className="px-5 py-3 border-b border-gray-100 font-semibold text-sm text-gray-700">
-              ⚠️ Требуют пополнения
+            <div className="px-5 py-3 border-b border-gray-100 font-semibold text-sm text-gray-700 flex items-center justify-between">
+              <span>⚠️ Требуют пополнения</span>
+              <ExportPanel products={lowFiltered}/>
             </div>
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                 <tr>
-                  {['Фото','Артикул','Название','Категория','WB','Мой','Всего','Мин.','Дефицит','Статус'].map(h => (
+                  {['Артикул','Название','Категория','WB','Мой','Всего','Мин.','Дефицит','Статус'].map(h => (
                     <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
                   ))}
                 </tr>
@@ -200,7 +342,7 @@ function Dashboard({ products }: { products: Product[] }) {
                   return (
                     <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
-                      <td className="px-4 py-2.5 font-medium max-w-xs truncate">{p.name}</td>
+                      <td className="px-4 py-2.5 font-medium max-w-xs truncate"><WbLink nmId={p.nm_id}>{p.name}</WbLink></td>
                       <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
                       <td className="px-4 py-2.5">{fmt(p.wb_stock)}</td>
                       <td className="px-4 py-2.5">{fmt(p.my_stock)}</td>
@@ -215,22 +357,22 @@ function Dashboard({ products }: { products: Product[] }) {
             </table>
           </div>
 
-          {/* Mobile */}
           <div className="space-y-2 md:hidden">
-            <div className="text-sm font-semibold text-gray-600">⚠️ Требуют пополнения</div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-600">⚠️ Требуют пополнения</div>
+              <ExportPanel products={lowFiltered}/>
+            </div>
             {lowFiltered.map(p => {
               const total = p.wb_stock + p.my_stock
               return (
                 <div key={p.id} className="card p-4 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="font-medium text-sm leading-snug truncate">{p.name}</div>
-                        <StockBadge total={total} min={p.min_stock}/>
-                      </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-medium text-sm leading-snug">{p.name}</div>
                       <div className="text-xs text-gray-400 font-mono mt-0.5">{p.vendor_code}</div>
                       {p.category && <div className="text-xs text-gray-400 mt-0.5">{p.category}</div>}
                     </div>
+                    <StockBadge total={total} min={p.min_stock}/>
                   </div>
                   <div className="grid grid-cols-4 gap-2 text-xs">
                     {[
@@ -283,10 +425,10 @@ function Products({ products, onMinStockChange }: {
         <input className="input text-sm" style={{ width: 240 }} placeholder="Поиск..."
           value={search} onChange={e => setSearch(e.target.value)}/>
         <FiltersBar categories={categories} category={category} onCategory={setCategory} status={status} onStatus={setStatus}/>
+        <ExportPanel products={filtered}/>
       </div>
       <div className="text-xs text-gray-400">Найдено: {filtered.length} из {products.length}</div>
 
-      {/* Desktop */}
       <div className="card overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
@@ -304,6 +446,7 @@ function Products({ products, onMinStockChange }: {
               const total = p.wb_stock + p.my_stock
               return (
                 <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="px-4 py-2"><ProductPhoto url={p.photo_url} name={p.name} nmId={p.nm_id} size={36}/></td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.vendor_code}</td>
                   <td className="px-4 py-2.5 font-medium max-w-xs truncate"><WbLink nmId={p.nm_id}>{p.name}</WbLink></td>
                   <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
@@ -324,7 +467,6 @@ function Products({ products, onMinStockChange }: {
         </table>
       </div>
 
-      {/* Mobile */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 && (
           <div className="card p-6 text-center text-gray-400 text-sm">Нет данных</div>
@@ -333,18 +475,16 @@ function Products({ products, onMinStockChange }: {
           const total = p.wb_stock + p.my_stock
           return (
             <div key={p.id} className="card p-4 space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-medium text-sm leading-snug">{p.name}</div>
-                    <StockBadge total={total} min={p.min_stock}/>
-                  </div>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-medium text-sm leading-snug">{p.name}</div>
                   <div className="text-xs text-gray-400 font-mono mt-0.5">{p.vendor_code}</div>
                   <div className="flex gap-2 mt-1 text-xs text-gray-400">
                     {p.category && <span>{p.category}</span>}
                     {p.brand && <span>· {p.brand}</span>}
                   </div>
                 </div>
+                <StockBadge total={total} min={p.min_stock}/>
               </div>
               <div className="grid grid-cols-3 gap-2 text-xs">
                 {[
@@ -384,10 +524,12 @@ function Stock({ products }: { products: Product[] }) {
 
   return (
     <div className="space-y-4">
-      <FiltersBar categories={categories} category={category} onCategory={setCategory} status={status} onStatus={setStatus}/>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <FiltersBar categories={categories} category={category} onCategory={setCategory} status={status} onStatus={setStatus}/>
+        <ExportPanel products={filtered}/>
+      </div>
       <div className="text-xs text-gray-400">Найдено: {filtered.length} из {products.length}</div>
 
-      {/* Desktop */}
       <div className="card overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
@@ -423,7 +565,6 @@ function Stock({ products }: { products: Product[] }) {
         </table>
       </div>
 
-      {/* Mobile */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 && (
           <div className="card p-6 text-center text-gray-400 text-sm">Нет данных</div>
@@ -433,15 +574,13 @@ function Stock({ products }: { products: Product[] }) {
           const date  = p.updated_at ? new Date(p.updated_at).toLocaleDateString('ru-RU') : '—'
           return (
             <div key={p.id} className="card p-4 space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-medium text-sm leading-snug">{p.name}</div>
-                    <StockBadge total={total} min={p.min_stock}/>
-                  </div>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-medium text-sm leading-snug">{p.name}</div>
                   <div className="text-xs text-gray-400 font-mono mt-0.5">{p.vendor_code}</div>
                   {p.category && <div className="text-xs text-gray-400 mt-0.5">{p.category}</div>}
                 </div>
+                <StockBadge total={total} min={p.min_stock}/>
               </div>
               <div className="grid grid-cols-4 gap-2 text-xs">
                 {[
@@ -550,7 +689,6 @@ function Supplies({ products }: { products: Product[] }) {
         </div>
       )}
 
-      {/* Desktop */}
       <div className="card overflow-x-auto hidden md:block">
         {loading ? (
           <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-gray-400"/></div>
@@ -558,14 +696,14 @@ function Supplies({ products }: { products: Product[] }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
               <tr>
-                {['Фото','Дата','Артикул','Название','Кол-во','Поставщик','Цена','Сумма','Комментарий'].map(h => (
+                {['Дата','Артикул','Название','Кол-во','Поставщик','Цена','Сумма','Комментарий'].map(h => (
                   <th key={h} className="px-4 py-2 text-left font-medium whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {supplies.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Поставок пока нет</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Поставок пока нет</td></tr>
               )}
               {supplies.map((s, i) => (
                 <tr key={s.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
@@ -584,7 +722,6 @@ function Supplies({ products }: { products: Product[] }) {
         )}
       </div>
 
-      {/* Mobile */}
       <div className="space-y-2 md:hidden">
         {loading && <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-gray-400"/></div>}
         {!loading && supplies.length === 0 && (
@@ -592,14 +729,12 @@ function Supplies({ products }: { products: Product[] }) {
         )}
         {supplies.map(s => (
           <div key={s.id} className="card p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start gap-2">
-                  <div className="font-medium text-sm leading-snug">{s.products?.name || s.vendor_code}</div>
-                  <div className="text-xs text-gray-400 whitespace-nowrap">{new Date(s.date).toLocaleDateString('ru-RU')}</div>
-                </div>
+            <div className="flex justify-between items-start gap-2">
+              <div>
+                <div className="font-medium text-sm">{s.products?.name || s.vendor_code}</div>
                 <div className="text-xs text-gray-400 font-mono mt-0.5">{s.vendor_code}</div>
               </div>
+              <div className="text-xs text-gray-400 whitespace-nowrap">{new Date(s.date).toLocaleDateString('ru-RU')}</div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-xs">
               {[
@@ -716,19 +851,13 @@ export default function App() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.push('/login')
-      } else {
-        setUser(session.user)
-        setAuthLoading(false)
-      }
+      if (!session) router.push('/login')
+      else { setUser(session.user); setAuthLoading(false) }
     })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) router.push('/login')
       else { setUser(session.user); setAuthLoading(false) }
     })
-
     return () => subscription.unsubscribe()
   }, [router])
 
